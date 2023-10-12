@@ -9,7 +9,7 @@ go-querystring is a Go library for encoding structs into URL query parameters.
 ## Usage ##
 
 ```go
-import "github.com/google/go-querystring/query"
+import "github.com/TGoers-FNSB/go-querystring-wrike/query"
 ```
 
 go-querystring is designed to assist in scenarios where you want to construct a
