@@ -1,24 +1,4 @@
-// Copyright 2013 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Package query implements encoding of structs into URL query parameters.
-//
-// As a simple example:
-//
-//	type Options struct {
-//		Query   string `url:"q"`
-//		ShowAll bool   `url:"all"`
-//		Page    int    `url:"page"`
-//	}
-//
-//	opt := Options{ "foo", true, 2 }
-//	v, _ := query.Values(opt)
-//	fmt.Print(v.Encode()) // will output: "q=foo&all=true&page=2"
-//
-// The exact mapping between Go values and url.Values is described in the
-// documentation for the Values() function.
-package query
+package wrikego
 
 import (
 	"bytes"
@@ -28,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	strcase "github.com/iancoleman/strcase"
 )
 
 var timeType = reflect.TypeOf(time.Time{})
@@ -40,87 +22,6 @@ type Encoder interface {
 	EncodeValues(key string, v *url.Values) error
 }
 
-// Values returns the url.Values encoding of v.
-//
-// Values expects to be passed a struct, and traverses it recursively using the
-// following encoding rules.
-//
-// Each exported struct field is encoded as a URL parameter unless
-//
-//   - the field's tag is "-", or
-//   - the field is empty and its tag specifies the "omitempty" option
-//
-// The empty values are false, 0, any nil pointer or interface value, any array
-// slice, map, or string of length zero, and any type (such as time.Time) that
-// returns true for IsZero().
-//
-// The URL parameter name defaults to the struct field name but can be
-// specified in the struct field's tag value.  The "url" key in the struct
-// field's tag value is the key name, followed by an optional comma and
-// options.  For example:
-//
-//	// Field is ignored by this package.
-//	Field int `url:"-"`
-//
-//	// Field appears as URL parameter "myName".
-//	Field int `url:"myName"`
-//
-//	// Field appears as URL parameter "myName" and the field is omitted if
-//	// its value is empty
-//	Field int `url:"myName,omitempty"`
-//
-//	// Field appears as URL parameter "Field" (the default), but the field
-//	// is skipped if empty.  Note the leading comma.
-//	Field int `url:",omitempty"`
-//
-// For encoding individual field values, the following type-dependent rules
-// apply:
-//
-// Boolean values default to encoding as the strings "true" or "false".
-// Including the "int" option signals that the field should be encoded as the
-// strings "1" or "0".
-//
-// time.Time values default to encoding as RFC3339 timestamps.  Including the
-// "unix" option signals that the field should be encoded as a Unix time (see
-// time.Unix()).  The "unixmilli" and "unixnano" options will encode the number
-// of milliseconds and nanoseconds, respectively, since January 1, 1970 (see
-// time.UnixNano()).  Including the "layout" struct tag (separate from the
-// "url" tag) will use the value of the "layout" tag as a layout passed to
-// time.Format.  For example:
-//
-//	// Encode a time.Time as YYYY-MM-DD
-//	Field time.Time `layout:"2006-01-02"`
-//
-// Slice and Array values default to encoding as multiple URL values of the
-// same name.  Including the "comma" option signals that the field should be
-// encoded as a single comma-delimited value.  Including the "space" option
-// similarly encodes the value as a single space-delimited string. Including
-// the "semicolon" option will encode the value as a semicolon-delimited string.
-// Including the "brackets" option signals that the multiple URL values should
-// have "[]" appended to the value name. "numbered" will append a number to
-// the end of each incidence of the value name, example:
-// name0=value0&name1=value1, etc.  Including the "del" struct tag (separate
-// from the "url" tag) will use the value of the "del" tag as the delimiter.
-// For example:
-//
-//	// Encode a slice of bools as ints ("1" for true, "0" for false),
-//	// separated by exclamation points "!".
-//	Field []bool `url:",int" del:"!"`
-//
-// Anonymous struct fields are usually encoded as if their inner exported
-// fields were fields in the outer struct, subject to the standard Go
-// visibility rules.  An anonymous struct field with a name given in its URL
-// tag is treated as having that name, rather than being anonymous.
-//
-// Non-nil pointer values are encoded as the value pointed to.
-//
-// Nested structs have their fields processed recursively and are encoded
-// including parent fields in value names for scoping. For example,
-//
-//	"user[name]=acme&user[addr][postcode]=1234&user[addr][city]=SFO"
-//
-// All other values are encoded using their default string representation.
-//
 // Multiple fields that encode to the same URL parameter name will be included
 // as multiple URL values of the same name.
 func Values(v interface{}) (url.Values, error) {
@@ -140,6 +41,8 @@ func Values(v interface{}) (url.Values, error) {
 	if val.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("query: Values() expects struct input. Got %v", val.Kind())
 	}
+
+	fmt.Println(val.FieldByName("CustomFields"))
 
 	err := reflectValue(values, val, "")
 	return values, err
@@ -164,6 +67,8 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 			continue
 		}
 		name, opts := parseTag(tag)
+
+		// fmt.Println(sv, name, opts)
 
 		if name == "" {
 			if sf.Anonymous {
@@ -209,6 +114,7 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 		}
 
 		if sv.Kind() == reflect.Slice || sv.Kind() == reflect.Array {
+			// fmt.Println(name)
 			if sv.Len() == 0 {
 				// skip if slice or array is empty
 				continue
@@ -223,11 +129,15 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 				del = ";"
 			} else if opts.Contains("brackets") {
 				name = name + "[]"
+			} else if opts.Contains("slice") { //! Here
+				del = "slice"
+			} else if opts.Contains("slice+struct") { //! Here
+				del = "slice+struct"
 			} else {
 				del = sf.Tag.Get("del")
 			}
 
-			if del != "" {
+			if del != "" && del != "slice" && del != "slice+struct" { //! Here
 				s := new(bytes.Buffer)
 				first := true
 				for i := 0; i < sv.Len(); i++ {
@@ -239,6 +149,8 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 					s.WriteString(valueString(sv.Index(i), opts, sf))
 				}
 				values.Add(name, s.String())
+			} else if opts.Contains("slice") || opts.Contains("slice+struct") { //! Here
+				values.Add(name, valueString(sv, opts, sf))
 			} else {
 				for i := 0; i < sv.Len(); i++ {
 					k := name
@@ -257,8 +169,8 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 		}
 
 		if sv.Kind() == reflect.Struct {
-			if err := reflectValue(values, sv, name); err != nil {
-				return err
+			if opts.Contains("struct") { //! Here
+				values.Add(name, valueString(sv, opts, sf))
 			}
 			continue
 		}
@@ -308,7 +220,62 @@ func valueString(v reflect.Value, opts tagOptions, sf reflect.StructField) strin
 		return t.Format(time.RFC3339)
 	}
 
+	//! Here
+	if opts.Contains("slice") {
+		val := v.Interface().([]string)
+		newVal := sliceConvert(val)
+		var inter interface{}
+		inter = newVal
+		return fmt.Sprint(inter)
+	} else if opts.Contains("struct") {
+		newVal := objectConvert(v)
+		var inter interface{}
+		inter = newVal
+		return fmt.Sprint(inter)
+	} else if opts.Contains("slice+struct") {
+		newVal := "["
+		for i := 0; i < v.Len(); i++ {
+			val := v.Index(i)
+			newVal += objectConvert(val) + ","
+		}
+		newVal = newVal[:len(newVal)-1] + "]"
+		var inter interface{}
+		inter = newVal
+		return fmt.Sprint(inter)
+	}
+
 	return fmt.Sprint(v.Interface())
+}
+
+//! Here
+func sliceConvert(sl []string) string {
+	if len(sl) > 0 {
+		return `["` + strings.Join(sl, `","`) + `"]`
+	} else {
+		return ""
+	}
+}
+
+//! Here
+func objectConvert(v reflect.Value) string {
+	newVal := "{"
+	val := v
+	for j := 0; j < val.NumField(); j++ {
+		key := val.Type().Field(j).Name
+		var value string // value := fmt.Sprint(val.FieldByName(key).Interface())
+		if val.FieldByName(key).Kind() == reflect.Slice {
+			value = sliceConvert(val.FieldByName(key).Interface().([]string))
+		} else {
+			value = `"` + fmt.Sprint(val.FieldByName(key).Interface()) + `"`
+		}
+		_, opts2 := parseTag(val.Type().Field(j).Tag.Get("url"))
+		if opts2.Contains("omitempty") && isEmptyValue(val.FieldByName(key)) {
+			continue
+		}
+		newVal += `"` + strcase.ToLowerCamel(key) + `":` + value + `,`
+	}
+	newVal = newVal[:len(newVal)-1] + "}"
+	return newVal
 }
 
 // isEmptyValue checks if a value should be considered empty for the purposes
