@@ -1,4 +1,4 @@
-# go-querystring #
+# go-querystring-wrike #
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/google/go-querystring/query.svg)](https://pkg.go.dev/github.com/google/go-querystring/query)
 [![Test Status](https://github.com/google/go-querystring/workflows/tests/badge.svg)](https://github.com/google/go-querystring/actions?query=workflow%3Atests)
@@ -9,7 +9,7 @@ go-querystring is a Go library for encoding structs into URL query parameters.
 ## Usage ##
 
 ```go
-import "github.com/google/go-querystring/query"
+import "github.com/TGoers-FNSB/go-querystring-wrike/query"
 ```
 
 go-querystring is designed to assist in scenarios where you want to construct a
