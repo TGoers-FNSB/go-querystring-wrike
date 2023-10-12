@@ -1,4 +1,4 @@
-package wrikego
+package query
 
 import (
 	"bytes"
