@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	strcase "github.com/iancoleman/strcase"
+	// strcase "github.com/iancoleman/strcase"
 )
 
 var timeType = reflect.TypeOf(time.Time{})
@@ -268,11 +268,12 @@ func objectConvert(v reflect.Value) string {
 		} else {
 			value = `"` + fmt.Sprint(val.FieldByName(key).Interface()) + `"`
 		}
-		_, opts2 := parseTag(val.Type().Field(j).Tag.Get("url"))
+		name, opts2 := parseTag(val.Type().Field(j).Tag.Get("url"))
 		if opts2.Contains("omitempty") && isEmptyValue(val.FieldByName(key)) {
 			continue
 		}
-		newVal += `"` + strcase.ToLowerCamel(key) + `":` + value + `,`
+		// newVal += `"` + strcase.ToLowerCamel(key) + `":` + value + `,`
+		newVal += `"` + name + `":` + value + `,`
 	}
 	newVal = newVal[:len(newVal)-1] + "}"
 	return newVal
