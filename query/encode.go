@@ -8,8 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	// strcase "github.com/iancoleman/strcase"
+	"slices"
 )
 
 var timeType = reflect.TypeOf(time.Time{})
@@ -27,6 +26,7 @@ type Encoder interface {
 func Values(v interface{}) (url.Values, error) {
 	values := make(url.Values)
 	val := reflect.ValueOf(v)
+
 	for val.Kind() == reflect.Ptr {
 		if val.IsNil() {
 			return values, nil
@@ -41,8 +41,6 @@ func Values(v interface{}) (url.Values, error) {
 	if val.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("query: Values() expects struct input. Got %v", val.Kind())
 	}
-
-	fmt.Println(val.FieldByName("CustomFields"))
 
 	err := reflectValue(values, val, "")
 	return values, err
@@ -68,8 +66,6 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 		}
 		name, opts := parseTag(tag)
 
-		// fmt.Println(sv, name, opts)
-
 		if name == "" {
 			if sf.Anonymous {
 				v := reflect.Indirect(sv)
@@ -87,7 +83,10 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 			name = scope + "[" + name + "]"
 		}
 
-		if opts.Contains("omitempty") && isEmptyValue(sv) {
+		// bypass - This tag is used on any struct value that is required to exists
+		// even if the value is empty, in order to create an item, such as creating
+		// an empty project.
+		if opts.Contains("omitempty") && isEmptyValue(sv) && !opts.Contains("bypass") {
 			continue
 		}
 
@@ -114,7 +113,6 @@ func reflectValue(values url.Values, val reflect.Value, scope string) error {
 		}
 
 		if sv.Kind() == reflect.Slice || sv.Kind() == reflect.Array {
-			// fmt.Println(name)
 			if sv.Len() == 0 {
 				// skip if slice or array is empty
 				continue
@@ -247,7 +245,7 @@ func valueString(v reflect.Value, opts tagOptions, sf reflect.StructField) strin
 	return fmt.Sprint(v.Interface())
 }
 
-//! Here
+// ! Here
 func sliceConvert(sl []string) string {
 	if len(sl) > 0 {
 		return `["` + strings.Join(sl, `","`) + `"]`
@@ -256,7 +254,7 @@ func sliceConvert(sl []string) string {
 	}
 }
 
-//! Here
+// ! Here
 func objectConvert(v reflect.Value) string {
 	newVal := "{"
 	val := v
@@ -275,13 +273,20 @@ func objectConvert(v reflect.Value) string {
 		// newVal += `"` + strcase.ToLowerCamel(key) + `":` + value + `,`
 		newVal += `"` + name + `":` + value + `,`
 	}
-	newVal = newVal[:len(newVal)-1] + "}"
+
+	if len(newVal) == 1 {
+		newVal = "{}"
+	} else {
+		newVal = newVal[:len(newVal)-1] + "}"
+	}
+
 	return newVal
 }
 
 // isEmptyValue checks if a value should be considered empty for the purposes
 // of omitting fields with the "omitempty" option.
 func isEmptyValue(v reflect.Value) bool {
+
 	switch v.Kind() {
 	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
 		return v.Len() == 0
@@ -295,6 +300,21 @@ func isEmptyValue(v reflect.Value) bool {
 		return v.Float() == 0
 	case reflect.Interface, reflect.Ptr:
 		return v.IsNil()
+	case reflect.Struct:
+		var results []bool
+		for j := 0; j < v.NumField(); j++ {
+			key := v.Type().Field(j).Name
+			value := v.FieldByName(key)
+			_, opts := parseTag(v.Type().Field(j).Tag.Get("url"))
+
+			result := isEmptyValue(value)
+			// fmt.Println(key, "-", value, "-", result, "---", isEmptyValue(value))
+			if opts.Contains("omitempty") {
+				continue
+			}
+			results = append(results, result)
+		}
+		return !slices.Contains(results, false)
 	}
 
 	type zeroable interface {
